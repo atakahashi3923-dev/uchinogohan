@@ -311,6 +311,9 @@ body{padding-bottom:86px!important}
 .web-detail-actions-v17 button,.web-detail-actions-v17 a{display:block;text-align:center;text-decoration:none;border-radius:14px;padding:13px;font-weight:700}
 .web-detail-actions-v17 button{border:0;background:#315f46;color:#fff}
 .web-detail-actions-v17 a{border:1px solid #315f46;color:#315f46;background:#fff}
+
+.qty button.active{background:var(--green);color:#fff;border-color:var(--green)}
+.inv-remove-v148{width:30px;height:30px;flex:0 0 30px;border:1px solid var(--line);border-radius:50%;background:#fff;color:var(--green);font-size:19px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer}
 </style><!-- うちのごはん Ver.1 family test build -->
 
 <style id="rating-style-v124">
@@ -463,19 +466,8 @@ body{padding-bottom:86px!important}
 </section>
 
 <section id="fridge" class="screen"><button class="back" onclick="show('home')">← ホーム</button>
-<h1>冷蔵庫</h1><div class="lead">ざっくりでOK。残り具合だけ覚えておきます。</div>
-<div class="scanbox">
- <b>写真から冷蔵庫に追加</b>
- <p>レシートや冷蔵庫を撮って、食材候補を確認してから追加します。</p>
- <div class="scan-actions">
-  <button class="scanbtn" onclick="document.getElementById('receiptCam').click()">レシートを撮る</button>
-  <button class="scanbtn" onclick="document.getElementById('fridgeCam').click()">冷蔵庫を撮る</button>
- </div>
- <input id="receiptCam" type="file" accept="image/*" capture="environment" hidden onchange="previewScan(this,'receipt')">
- <input id="fridgeCam" type="file" accept="image/*" capture="environment" hidden onchange="previewScan(this,'fridge')">
- <img id="scanPreview" class="scan-preview">
- <div id="scanResult" class="detected"></div>
-</div>
+<h1>冷蔵庫</h1><div class="lead">食材を手動で追加して、残り具合をざっくり管理します。</div>
+
 <div class="inventory" id="inventory"></div>
 <div style="display:flex;gap:8px;margin-top:14px"><button class="btn" onclick="addFood()">＋ 食材を追加</button><button class="btn ghost" onclick="show('today')">これで献立を考える</button></div>
 <div class="savebar">在庫はこの端末に自動保存</div></section>
@@ -495,9 +487,34 @@ if ('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.s
 
 const defaultInv=[['豚こま','普通'],['キャベツ','少ない'],['卵','普通'],['トマト','少ない'],['ブロッコリー','普通']];
 let inv=JSON.parse(localStorage.getItem('uchi_inv')||'null')||defaultInv;
-function renderInv(){let el=document.getElementById('inventory');if(!el)return;el.innerHTML=inv.map((x,i)=>`<div class="inv"><strong>${x[0]}</strong><div class="qty"><button onclick="setQty(${i},'少ない')">少</button><button onclick="setQty(${i},'普通')">普</button><button onclick="setQty(${i},'多い')">多</button><span style="min-width:42px;text-align:right;font-size:11px;color:var(--muted)">${x[1]}</span></div></div>`).join('')}
-function setQty(i,q){inv[i][1]=q;localStorage.setItem('uchi_inv',JSON.stringify(inv));renderInv()}
-function addFood(){let n=prompt('食材名を入力');if(n){inv.push([n,'普通']);localStorage.setItem('uchi_inv',JSON.stringify(inv));renderInv()}}
+function escInv(s){return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
+function saveInv(){localStorage.setItem('uchi_inv',JSON.stringify(inv));renderInv()}
+function renderInv(){
+ let el=document.getElementById('inventory');if(!el)return;
+ el.innerHTML=inv.map((x,i)=>`<div class="inv">
+   <strong>${escInv(x[0])}</strong>
+   <div class="qty">
+     <button class="${x[1]==='少ない'?'active':''}" onclick="setQty(${i},'少ない')">少</button>
+     <button class="${x[1]==='普通'?'active':''}" onclick="setQty(${i},'普通')">普</button>
+     <button class="${x[1]==='多い'?'active':''}" onclick="setQty(${i},'多い')">多</button>
+   </div>
+   <button class="inv-remove-v148" onclick="removeFood(${i})" aria-label="${escInv(x[0])}を削除">×</button>
+ </div>`).join('')
+}
+function setQty(i,q){if(!inv[i])return;inv[i][1]=q;saveInv()}
+function addFood(){
+ let n=prompt('追加する食材名を入力してください');
+ if(n===null)return;
+ n=n.trim();if(!n)return;
+ let ex=inv.find(x=>x[0]===n);
+ if(ex)ex[1]='普通';else inv.push([n,'普通']);
+ saveInv();
+}
+function removeFood(i){
+ if(!inv[i])return;
+ if(!confirm(`「${inv[i][0]}」を冷蔵庫から削除しますか？`))return;
+ inv.splice(i,1);saveInv();
+}
 function vote(btn,v){btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');let meal=document.getElementById('rTitle').textContent||'料理';let data=JSON.parse(localStorage.getItem('uchi_votes')||'{}');data[meal]=data[meal]||{};data[meal][btn.parentElement.dataset.person]=v;localStorage.setItem('uchi_votes',JSON.stringify(data))}
 renderInv();
 
@@ -745,36 +762,6 @@ function renderShopping(items){
  const box=document.getElementById('shoppingList');if(!box)return;
  if(!items.length){box.innerHTML='<div class="empty-state">買い足す食材はありません。</div>';return}
  box.innerHTML=items.map((x,i)=>`<label class="shop-item" id="shop${i}"><input type="checkbox" onchange="this.parentElement.classList.toggle('done',this.checked)"><span>${x}</span></label>`).join('');
-}
-
-const receiptSamples=['豚こま','卵','トマト','ブロッコリー','牛乳'];
-const fridgeSamples=['キャベツ','卵','トマト','ブロッコリー','チーズ'];
-function previewScan(input,type){
- const f=input.files&&input.files[0];if(!f)return;
- const img=document.getElementById('scanPreview');img.src=URL.createObjectURL(f);img.style.display='block';
- // Prototype: camera/file UI is real; recognition candidates are simulated until the vision backend is connected.
- const names=type==='receipt'?receiptSamples:fridgeSamples;
- renderDetected(names,type);
-}
-function renderDetected(names,type){
- const box=document.getElementById('scanResult');
- box.innerHTML=`<div style="font-size:11px;color:var(--muted);margin-bottom:7px">${type==='receipt'?'レシート':'冷蔵庫'}から見つけた候補</div>`+
- names.map((n,i)=>`<div class="detected-row"><label><input type="checkbox" checked data-food="${n}"> ${n}</label><select data-qty="${n}"><option>少ない</option><option selected>普通</option><option>多い</option></select></div>`).join('')+
- `<button class="scanbtn" style="margin-top:12px" onclick="commitDetected()">選んだ食材を冷蔵庫に追加</button>`;
-}
-function commitDetected(){
- const checked=[...document.querySelectorAll('#scanResult input[type=checkbox]:checked')];
- if(!checked.length)return;
- let inv=[];try{inv=JSON.parse(localStorage.getItem('uchinogohan_inventory')||'[]')}catch(e){}
- checked.forEach(c=>{
-   const name=c.dataset.food, sel=document.querySelector(`select[data-qty="${name}"]`), qty=sel?sel.value:'普通';
-   const ex=inv.find(x=>(typeof x==='string'?x:(x.name||x.n))===name);
-   if(ex && typeof ex==='object'){ex.qty=qty;ex.amount=qty}
-   else inv.push({name:name,qty:qty,amount:qty});
- });
- localStorage.setItem('uchinogohan_inventory',JSON.stringify(inv));
- document.getElementById('scanResult').innerHTML='<div style="font-size:12px;padding:12px 0">✓ 冷蔵庫に追加しました</div>';
- if(typeof renderInventory==='function')renderInventory();
 }
 
 function refreshQtyVisuals(){
@@ -2317,7 +2304,7 @@ function saveCookRatingV124(withRating){
    if(actions && !document.getElementById('fridgeCardV135')){
      const c=document.createElement('div');
      c.id='fridgeCardV135'; c.className='card fridge-restored-v135'; c.onclick=()=>show('fridge');
-     c.innerHTML=`<svg viewBox="0 0 70 60"><rect x="20" y="3" width="32" height="54" rx="5"/><path d="M20 23h32M27 12v7M27 31v9"/></svg><b>冷蔵庫</b><small>在庫・レシート・写真・手入力</small>`;
+     c.innerHTML=`<svg viewBox="0 0 70 60"><rect x="20" y="3" width="32" height="54" rx="5"/><path d="M20 23h32M27 12v7M27 31v9"/></svg><b>冷蔵庫</b><small>在庫・手入力</small>`;
      actions.appendChild(c);
    }
    document.querySelectorAll('nav button').forEach(b=>{
